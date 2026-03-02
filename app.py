@@ -23,6 +23,7 @@ except ImportError:
 BINANCE_BONUS_LINK = "https://www.binance.com/referral/earn-together/refer2earn-usdc/claim?hl=fr&ref=GRO_28502_CSMIX&utm_source=default"
 BINANCE_PAY_ID = "536502443"
 GTM_ID = "GTM-MF2BVNDS"
+GA_MEASUREMENT_ID = "G-RNGVHQ92XF"
 
 TRANSLATIONS = {
     "EN": {
@@ -227,6 +228,34 @@ components.html(
     }})();
     </script>
     <!-- End Google Tag Manager -->
+    """,
+    height=0,
+)
+
+components.html(
+    f"""
+    <!-- Google tag (gtag.js) -->
+    <script>
+    (function() {{
+      var GA_ID = "{GA_MEASUREMENT_ID}";
+      var w = window.parent || window;
+      var d = w.document;
+
+      if (!d.getElementById("ga-gtag-src-" + GA_ID)) {{
+        var s = d.createElement("script");
+        s.id = "ga-gtag-src-" + GA_ID;
+        s.async = true;
+        s.src = "https://www.googletagmanager.com/gtag/js?id=" + GA_ID;
+        (d.head || d.documentElement).appendChild(s);
+      }}
+
+      w.dataLayer = w.dataLayer || [];
+      w.gtag = w.gtag || function() {{ w.dataLayer.push(arguments); }};
+      w.gtag("js", new Date());
+      w.gtag("config", GA_ID);
+    }})();
+    </script>
+    <!-- End Google tag (gtag.js) -->
     """,
     height=0,
 )
