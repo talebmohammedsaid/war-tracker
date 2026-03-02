@@ -202,11 +202,29 @@ components.html(
     f"""
     <!-- Google Tag Manager -->
     <script>
-    (function(w,d,s,l,i){{w[l]=w[l]||[];w[l].push({{'gtm.start':
-    new Date().getTime(),event:'gtm.js'}});var f=d.getElementsByTagName(s)[0],
-    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
-    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-    }})(window,document,'script','dataLayer','{GTM_ID}');
+    (function() {{
+      var GTM_ID = "{GTM_ID}";
+      var w = window.parent || window;
+      var d = w.document;
+      var l = "dataLayer";
+
+      w[l] = w[l] || [];
+      w[l].push({{ "gtm.start": new Date().getTime(), event: "gtm.js" }});
+
+      if (!d.getElementById("gtm-loader-" + GTM_ID)) {{
+        var j = d.createElement("script");
+        j.id = "gtm-loader-" + GTM_ID;
+        j.async = true;
+        j.src = "https://www.googletagmanager.com/gtm.js?id=" + GTM_ID;
+        (d.head || d.documentElement).appendChild(j);
+      }}
+
+      // Optional helper for tools expecting gtag on parent window.
+      if (!w.gtag) {{
+        w.gtag = function() {{ w[l].push(arguments); }};
+      }}
+      w.gtag("js", new Date());
+    }})();
     </script>
     <!-- End Google Tag Manager -->
     """,
@@ -216,8 +234,23 @@ components.html(
 components.html(
     f"""
     <!-- Google Tag Manager (noscript) -->
-    <noscript><iframe src="https://www.googletagmanager.com/ns.html?id={GTM_ID}"
-    height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+    <script>
+    (function() {{
+      var GTM_ID = "{GTM_ID}";
+      var w = window.parent || window;
+      var d = w.document;
+      if (!d.getElementById("gtm-noscript-" + GTM_ID)) {{
+        var iframe = d.createElement("iframe");
+        iframe.id = "gtm-noscript-" + GTM_ID;
+        iframe.src = "https://www.googletagmanager.com/ns.html?id=" + GTM_ID;
+        iframe.height = "0";
+        iframe.width = "0";
+        iframe.style.display = "none";
+        iframe.style.visibility = "hidden";
+        (d.body || d.documentElement).appendChild(iframe);
+      }}
+    }})();
+    </script>
     <!-- End Google Tag Manager (noscript) -->
     """,
     height=0,
