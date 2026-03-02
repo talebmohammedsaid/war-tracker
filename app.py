@@ -45,6 +45,8 @@ TRANSLATIONS = {
         "share_x": "Share on X",
         "status_live": "Live Data Connection: Active",
         "read_original": "Read original article",
+        "article_date": "Published",
+        "date_unknown": "Unknown date",
         "developer_support": "Developer Support",
         "binance_pay_id": "Binance Pay ID",
         "copy_id": "Copy ID",
@@ -97,6 +99,8 @@ TRANSLATIONS = {
         "share_x": "Partager sur X",
         "status_live": "Connexion Donnees Live: Active",
         "read_original": "Lire l'article original",
+        "article_date": "Date",
+        "date_unknown": "Date inconnue",
         "developer_support": "Support Developpeur",
         "binance_pay_id": "ID Binance Pay",
         "copy_id": "Copier ID",
@@ -149,6 +153,8 @@ TRANSLATIONS = {
         "share_x": "مشاركة على X",
         "status_live": "اتصال البيانات المباشر: نشط",
         "read_original": "قراءة المقال الاصلي",
+        "article_date": "التاريخ",
+        "date_unknown": "تاريخ غير متوفر",
         "developer_support": "دعم المطور",
         "binance_pay_id": "معرف Binance Pay",
         "copy_id": "نسخ المعرف",
@@ -271,7 +277,8 @@ st.title(t["title"])
 
 @st.cache_data(ttl=60)
 def fetch_price(symbol: str):
-    hist = yf.Ticker(symbol).history(period="2d", interval="1d")
+    # Use a wider window so we can still compute daily delta when data is sparse.
+    hist = yf.Ticker(symbol).history(period="7d", interval="1d")
     if hist.empty:
         return None, None
     close = hist["Close"].dropna()
@@ -308,6 +315,13 @@ def fetch_intraday_24h():
 
 @st.cache_data(ttl=180)
 def fetch_live_news(limit: int = 5):
+    def parse_entry_date(entry):
+        parsed = entry.get("published_parsed") or entry.get("updated_parsed")
+        if parsed:
+            return datetime(*parsed[:6]).strftime("%Y-%m-%d %H:%M")
+        text = entry.get("published") or entry.get("updated") or ""
+        return text.strip() if text else None
+
     items = []
     seen = set()
     reuters = feedparser.parse("https://feeds.reuters.com/Reuters/worldNews")
@@ -321,7 +335,9 @@ def fetch_live_news(limit: int = 5):
             continue
         if "iran" not in text and "conflict" not in text:
             continue
-        items.append({"title": title, "summary": summary[:180], "link": link})
+        items.append(
+            {"title": title, "summary": summary[:180], "link": link, "date": parse_entry_date(entry)}
+        )
         seen.add(link)
         if len(items) >= limit:
             return items
@@ -333,7 +349,9 @@ def fetch_live_news(limit: int = 5):
             continue
         title = entry.get("title", t["untitled"])
         summary = re.sub(r"<[^>]+>", " ", entry.get("summary", "")).strip()
-        items.append({"title": title, "summary": summary[:180], "link": link})
+        items.append(
+            {"title": title, "summary": summary[:180], "link": link, "date": parse_entry_date(entry)}
+        )
         seen.add(link)
         if len(items) >= limit:
             break
@@ -488,6 +506,7 @@ else:
     st.divider()
     for item in news:
         st.markdown(f"**[{item['title']}]({item['link']})**")
+        st.caption(f"{t['article_date']}: {item.get('date') or t['date_unknown']}")
         st.caption(item["summary"])
         st.markdown(f"[{t['read_original']}]({item['link']})")
 
