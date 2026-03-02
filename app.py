@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 import feedparser
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 import yfinance as yf
 try:
     import plotly.graph_objects as go
@@ -21,6 +22,7 @@ except ImportError:
 
 BINANCE_BONUS_LINK = "https://www.binance.com/referral/earn-together/refer2earn-usdc/claim?hl=fr&ref=GRO_28502_CSMIX&utm_source=default"
 BINANCE_PAY_ID = "536502443"
+GTM_ID = "GTM-MF2BVNDS"
 
 TRANSLATIONS = {
     "EN": {
@@ -195,6 +197,31 @@ ASSETS = {
 }
 
 st.set_page_config(page_title="Global War Economy Dashboard", layout="wide")
+
+components.html(
+    f"""
+    <!-- Google Tag Manager -->
+    <script>
+    (function(w,d,s,l,i){{w[l]=w[l]||[];w[l].push({{'gtm.start':
+    new Date().getTime(),event:'gtm.js'}});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    }})(window,document,'script','dataLayer','{GTM_ID}');
+    </script>
+    <!-- End Google Tag Manager -->
+    """,
+    height=0,
+)
+
+components.html(
+    f"""
+    <!-- Google Tag Manager (noscript) -->
+    <noscript><iframe src="https://www.googletagmanager.com/ns.html?id={GTM_ID}"
+    height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+    <!-- End Google Tag Manager (noscript) -->
+    """,
+    height=0,
+)
 
 st.markdown(
     """
