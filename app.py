@@ -197,6 +197,13 @@ ASSETS = {
     "RTX": "rtx",
 }
 
+
+def _safe_float(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
 st.set_page_config(page_title="Global War Economy Dashboard", layout="wide")
 
 components.html(
@@ -364,19 +371,48 @@ st.markdown(f'<div class="update-chip">{t["last_updated"]}: {last_updated}</div>
 st.title(t["title"])
 
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=15)
 def fetch_price(symbol: str):
-    # Use a wider window so we can still compute daily delta when data is sparse.
-    hist = yf.Ticker(symbol).history(period="7d", interval="1d")
-    if hist.empty:
+    try:
+        ticker = yf.Ticker(symbol)
+
+        # First try fast quote fields (lowest latency path in yfinance).
+        fast_info = {}
+        try:
+            fast_info = ticker.fast_info or {}
+        except Exception:
+            fast_info = {}
+
+        current = _safe_float(fast_info.get("lastPrice") or fast_info.get("regularMarketPrice"))
+        prev_close = _safe_float(fast_info.get("previousClose"))
+
+        # Fallback to intraday candles for current price.
+        if current is None:
+            intraday = ticker.history(period="1d", interval="1m")
+            if not intraday.empty:
+                close = intraday["Close"].dropna()
+                if not close.empty:
+                    current = _safe_float(close.iloc[-1])
+
+        # Fallback to daily candles for previous close.
+        if prev_close is None:
+            daily = ticker.history(period="7d", interval="1d")
+            if not daily.empty:
+                close = daily["Close"].dropna()
+                if len(close) > 1:
+                    prev_close = _safe_float(close.iloc[-2])
+                elif len(close) == 1:
+                    prev_close = _safe_float(close.iloc[-1])
+                    if current is None:
+                        current = _safe_float(close.iloc[-1])
+
+        if current is None or prev_close in (None, 0):
+            return None, None
+
+        change = ((current - prev_close) / prev_close) * 100
+        return current, float(change)
+    except Exception:
         return None, None
-    close = hist["Close"].dropna()
-    if close.empty:
-        return None, None
-    current = float(close.iloc[-1])
-    prev = float(close.iloc[-2]) if len(close) > 1 else current
-    change = 0.0 if prev == 0 else ((current - prev) / prev) * 100
-    return current, change
 
 
 @st.cache_data(ttl=120)
@@ -495,21 +531,52 @@ def build_ai_summary(news_items):
 
 
 def war_risk_score(changes):
-    avg = (max(changes.get("GC=F", 0), 0) + max(changes.get("LMT", 0), 0) + max(changes.get("RTX", 0), 0)) / 3
-    return max(0, min(100, round(avg * 20, 1)))
+    def clamp_pct(value, cap=5.0):
+        return max(0.0, min((value or 0.0), cap)) / cap
+
+    def clamp_abs(value, cap=5.0):
+        return min(abs(value or 0.0), cap) / cap
+
+    # Up-moves in hedging assets drive the risk signal.
+    hedge_signal = (
+        0.35 * clamp_pct(changes.get("GC=F"))
+        + 0.30 * clamp_pct(changes.get("BZ=F"))
+        + 0.20 * clamp_pct(changes.get("LMT"))
+        + 0.15 * clamp_pct(changes.get("RTX"))
+    )
+
+    # Absolute movement keeps signal responsive during mixed sessions.
+    volatility_signal = (
+        clamp_abs(changes.get("GC=F"))
+        + clamp_abs(changes.get("BZ=F"))
+        + clamp_abs(changes.get("LMT"))
+        + clamp_abs(changes.get("RTX"))
+    ) / 4
+
+    score = ((0.8 * hedge_signal) + (0.2 * volatility_signal)) * 100
+    return max(0, min(100, round(score, 1)))
 
 
 st.subheader(t["financial_engine"])
 metric_cols = st.columns(4)
 changes = {}
+unavailable_assets = []
 
 for col, (symbol, name_key) in zip(metric_cols, ASSETS.items()):
     price, change = fetch_price(symbol)
     changes[symbol] = change or 0.0
     if price is None:
         col.metric(t[name_key], t["na"], t["na"])
+        unavailable_assets.append(symbol)
     else:
         col.metric(t[name_key], f"{price:,.2f}", f"{change:+.2f}%")
+
+if unavailable_assets:
+    st.warning(
+        "Live market feed is temporarily unavailable for: "
+        + ", ".join(unavailable_assets)
+        + "."
+    )
 
 with st.container():
     st.markdown(
