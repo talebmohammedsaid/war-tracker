@@ -1,5 +1,10 @@
 import re
-from datetime import datetime
+import smtplib
+from datetime import datetime, timezone
+from email.message import EmailMessage
+from pathlib import Path
+from urllib.error import URLError
+from urllib.request import urlopen
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
@@ -12,13 +17,6 @@ try:
     import plotly.graph_objects as go
 except ImportError:
     go = None
-
-try:
-    from streamlit_autorefresh import st_autorefresh
-except ImportError:
-    def st_autorefresh(*args, **kwargs):
-        return 0
-
 
 BINANCE_BONUS_LINK = "https://www.binance.com/referral/earn-together/refer2earn-usdc/claim?hl=fr&ref=GRO_28502_CSMIX&utm_source=default"
 BINANCE_PAY_ID = "536502443"
@@ -79,6 +77,72 @@ TRANSLATIONS = {
         "oil": "Brent Oil",
         "lmt": "Lockheed Martin",
         "rtx": "RTX Corporation",
+        "tab_live": "Live Dashboard",
+        "tab_intel": "Risk Intelligence",
+        "tab_hotspots": "Hotspots",
+        "tab_scenarios": "Scenarios",
+        "tab_growth": "Growth",
+        "alerts_title": "Realtime Alerts",
+        "alerts_enable": "Enable threshold alerts",
+        "alerts_threshold": "Risk threshold",
+        "alerts_inapp": "In-app alert",
+        "alerts_telegram": "Telegram alert",
+        "alerts_email": "Email alert",
+        "alerts_bot_token": "Telegram bot token",
+        "alerts_chat_id": "Telegram chat id",
+        "alerts_email_target": "Email target",
+        "alerts_email_help": "For email alerts, add SMTP secrets in .streamlit/secrets.toml.",
+        "alert_telegram_sent": "Telegram alert sent.",
+        "alert_email_sent": "Email alert sent.",
+        "data_feed_warn": "Live market feed is temporarily unavailable for:",
+        "risk_history_title": "Risk Score History",
+        "risk_window": "Window",
+        "risk_history_unavailable": "Historical score is unavailable right now.",
+        "score_explainability": "Score Explainability",
+        "current_score": "Current score",
+        "data_reliability": "Data Reliability",
+        "hotspots_title": "Geopolitical Hotspots",
+        "scenario_comparison": "Scenario Comparison",
+        "scenario_label": "Scenario",
+        "projected_score": "Projected Score",
+        "scenario_escalation": "Escalation",
+        "scenario_status_quo": "Status Quo",
+        "scenario_deescalation": "De-escalation",
+        "custom_scenario": "Custom Scenario",
+        "gold_shift": "Gold shift %",
+        "oil_shift": "Oil shift %",
+        "lmt_shift": "LMT shift %",
+        "rtx_shift": "RTX shift %",
+        "projected_global_risk": "Projected Global War Risk",
+        "growth_title": "Growth & Conversion",
+        "premium_signals": "Premium Signals",
+        "premium_free": "- Free: live dashboard + daily score",
+        "premium_pro": "- Pro: realtime Telegram/Email alerts + scenario exports",
+        "premium_enterprise": "- Enterprise: API access + custom watchlists",
+        "join_waitlist": "Join Premium Waitlist",
+        "newsletter": "Newsletter",
+        "subscribe": "Subscribe",
+        "invalid_email": "Please enter a valid email.",
+        "subscribed_ok": "Subscribed successfully.",
+        "col_asset": "Asset",
+        "col_name": "Name",
+        "col_price": "Price",
+        "col_change": "Change %",
+        "col_source": "Source",
+        "col_market_time": "Market Time",
+        "col_freshness": "Freshness",
+        "col_status": "Status",
+        "status_ok": "OK",
+        "status_unavailable": "Unavailable",
+        "contrib_gold": "Gold impact",
+        "contrib_oil": "Oil impact",
+        "contrib_lmt": "LMT impact",
+        "contrib_rtx": "RTX impact",
+        "contrib_volatility": "Volatility impact",
+        "contrib_label": "Contribution",
+        "points_label": "Points",
+        "hotspot_label": "Hotspot",
+        "intensity_label": "Intensity",
     },
     "FR": {
         "title": "Moniteur Global des Marches Geopolitiques",
@@ -133,6 +197,72 @@ TRANSLATIONS = {
         "oil": "Petrole Brent",
         "lmt": "Lockheed Martin",
         "rtx": "RTX Corporation",
+        "tab_live": "Tableau en Direct",
+        "tab_intel": "Intelligence du Risque",
+        "tab_hotspots": "Points Chauds",
+        "tab_scenarios": "Scenarios",
+        "tab_growth": "Croissance",
+        "alerts_title": "Alertes Temps Reel",
+        "alerts_enable": "Activer les alertes de seuil",
+        "alerts_threshold": "Seuil de risque",
+        "alerts_inapp": "Alerte dans l'application",
+        "alerts_telegram": "Alerte Telegram",
+        "alerts_email": "Alerte Email",
+        "alerts_bot_token": "Token bot Telegram",
+        "alerts_chat_id": "ID chat Telegram",
+        "alerts_email_target": "Email cible",
+        "alerts_email_help": "Pour les alertes email, ajoutez les secrets SMTP dans .streamlit/secrets.toml.",
+        "alert_telegram_sent": "Alerte Telegram envoyee.",
+        "alert_email_sent": "Alerte email envoyee.",
+        "data_feed_warn": "Flux marche live temporairement indisponible pour :",
+        "risk_history_title": "Historique du Score de Risque",
+        "risk_window": "Fenetre",
+        "risk_history_unavailable": "L'historique du score est indisponible pour le moment.",
+        "score_explainability": "Explication du Score",
+        "current_score": "Score actuel",
+        "data_reliability": "Fiabilite des Donnees",
+        "hotspots_title": "Points Chauds Geopolitiques",
+        "scenario_comparison": "Comparaison des Scenarios",
+        "scenario_label": "Scenario",
+        "projected_score": "Score projete",
+        "scenario_escalation": "Escalade",
+        "scenario_status_quo": "Statu Quo",
+        "scenario_deescalation": "Desescalade",
+        "custom_scenario": "Scenario Personnalise",
+        "gold_shift": "Variation Or %",
+        "oil_shift": "Variation Petrole %",
+        "lmt_shift": "Variation LMT %",
+        "rtx_shift": "Variation RTX %",
+        "projected_global_risk": "Risque Global projete",
+        "growth_title": "Croissance & Conversion",
+        "premium_signals": "Signaux Premium",
+        "premium_free": "- Gratuit : tableau live + score quotidien",
+        "premium_pro": "- Pro : alertes Telegram/Email en temps reel + exports scenarios",
+        "premium_enterprise": "- Entreprise : acces API + listes personnalisees",
+        "join_waitlist": "Rejoindre la Liste Premium",
+        "newsletter": "Newsletter",
+        "subscribe": "S'abonner",
+        "invalid_email": "Veuillez saisir un email valide.",
+        "subscribed_ok": "Inscription reussie.",
+        "col_asset": "Actif",
+        "col_name": "Nom",
+        "col_price": "Prix",
+        "col_change": "Variation %",
+        "col_source": "Source",
+        "col_market_time": "Heure Marche",
+        "col_freshness": "Fraicheur",
+        "col_status": "Statut",
+        "status_ok": "OK",
+        "status_unavailable": "Indisponible",
+        "contrib_gold": "Impact Or",
+        "contrib_oil": "Impact Petrole",
+        "contrib_lmt": "Impact LMT",
+        "contrib_rtx": "Impact RTX",
+        "contrib_volatility": "Impact Volatilite",
+        "contrib_label": "Contribution",
+        "points_label": "Points",
+        "hotspot_label": "Point Chaud",
+        "intensity_label": "Intensite",
     },
     "AR": {
         "title": "لوحة مراقبة السوق الجيوسياسي العالمية",
@@ -187,6 +317,72 @@ TRANSLATIONS = {
         "oil": "نفط برنت",
         "lmt": "لوكهيد مارتن",
         "rtx": "شركة RTX",
+        "tab_live": "لوحة مباشرة",
+        "tab_intel": "تحليل المخاطر",
+        "tab_hotspots": "النقاط الساخنة",
+        "tab_scenarios": "السيناريوهات",
+        "tab_growth": "النمو",
+        "alerts_title": "تنبيهات فورية",
+        "alerts_enable": "تفعيل تنبيهات العتبة",
+        "alerts_threshold": "عتبة المخاطر",
+        "alerts_inapp": "تنبيه داخل التطبيق",
+        "alerts_telegram": "تنبيه تيليغرام",
+        "alerts_email": "تنبيه البريد",
+        "alerts_bot_token": "رمز بوت تيليغرام",
+        "alerts_chat_id": "معرف محادثة تيليغرام",
+        "alerts_email_target": "البريد المستهدف",
+        "alerts_email_help": "لتنبيهات البريد اضف اعدادات SMTP داخل .streamlit/secrets.toml.",
+        "alert_telegram_sent": "تم ارسال تنبيه تيليغرام.",
+        "alert_email_sent": "تم ارسال تنبيه البريد.",
+        "data_feed_warn": "تغذية السوق المباشرة غير متاحة مؤقتا لـ:",
+        "risk_history_title": "سجل درجة المخاطر",
+        "risk_window": "الفترة",
+        "risk_history_unavailable": "سجل الدرجات غير متاح حاليا.",
+        "score_explainability": "شرح الدرجة",
+        "current_score": "الدرجة الحالية",
+        "data_reliability": "موثوقية البيانات",
+        "hotspots_title": "النقاط الجيوسياسية الساخنة",
+        "scenario_comparison": "مقارنة السيناريوهات",
+        "scenario_label": "السيناريو",
+        "projected_score": "الدرجة المتوقعة",
+        "scenario_escalation": "تصعيد",
+        "scenario_status_quo": "استقرار",
+        "scenario_deescalation": "خفض التصعيد",
+        "custom_scenario": "سيناريو مخصص",
+        "gold_shift": "تغير الذهب %",
+        "oil_shift": "تغير النفط %",
+        "lmt_shift": "تغير LMT %",
+        "rtx_shift": "تغير RTX %",
+        "projected_global_risk": "مخاطر الحرب المتوقعة",
+        "growth_title": "النمو والتحويل",
+        "premium_signals": "اشارات بريميوم",
+        "premium_free": "- مجاني: لوحة مباشرة + درجة يومية",
+        "premium_pro": "- برو: تنبيهات فورية Telegram/Email + تصدير السيناريوهات",
+        "premium_enterprise": "- مؤسسة: API + قوائم مراقبة مخصصة",
+        "join_waitlist": "الانضمام لقائمة بريميوم",
+        "newsletter": "النشرة البريدية",
+        "subscribe": "اشتراك",
+        "invalid_email": "يرجى ادخال بريد صحيح.",
+        "subscribed_ok": "تم الاشتراك بنجاح.",
+        "col_asset": "الاصل",
+        "col_name": "الاسم",
+        "col_price": "السعر",
+        "col_change": "التغير %",
+        "col_source": "المصدر",
+        "col_market_time": "وقت السوق",
+        "col_freshness": "الحداثة",
+        "col_status": "الحالة",
+        "status_ok": "متاح",
+        "status_unavailable": "غير متاح",
+        "contrib_gold": "تأثير الذهب",
+        "contrib_oil": "تأثير النفط",
+        "contrib_lmt": "تأثير LMT",
+        "contrib_rtx": "تأثير RTX",
+        "contrib_volatility": "تأثير التقلب",
+        "contrib_label": "المساهمة",
+        "points_label": "النقاط",
+        "hotspot_label": "النقطة الساخنة",
+        "intensity_label": "الشدة",
     },
 }
 
@@ -197,12 +393,94 @@ ASSETS = {
     "RTX": "rtx",
 }
 
+HOTSPOTS = [
+    {"name": "Tehran", "lat": 35.6892, "lon": 51.3890, "keywords": ["iran", "tehran", "israel"]},
+    {"name": "Red Sea", "lat": 19.5000, "lon": 40.0000, "keywords": ["red sea", "shipping", "houthi"]},
+    {"name": "Strait of Hormuz", "lat": 26.5667, "lon": 56.2500, "keywords": ["hormuz", "gulf", "oil tanker"]},
+    {"name": "Washington", "lat": 38.9072, "lon": -77.0369, "keywords": ["sanctions", "pentagon", "white house"]},
+]
+
 
 def _safe_float(value):
     try:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def inject_seo_meta(title: str, description: str):
+    escaped_title = title.replace('"', "")
+    escaped_desc = description.replace('"', "")
+    components.html(
+        f"""
+        <script>
+        (function() {{
+          var d = (window.parent || window).document;
+          d.title = "{escaped_title}";
+          function setMeta(attr, key, value) {{
+            var selector = "meta[" + attr + "='" + key + "']";
+            var el = d.querySelector(selector);
+            if (!el) {{
+              el = d.createElement("meta");
+              el.setAttribute(attr, key);
+              d.head.appendChild(el);
+            }}
+            el.setAttribute("content", value);
+          }}
+          setMeta("name", "description", "{escaped_desc}");
+          setMeta("property", "og:title", "{escaped_title}");
+          setMeta("property", "og:description", "{escaped_desc}");
+          setMeta("property", "og:type", "website");
+        }})();
+        </script>
+        """,
+        height=0,
+    )
+
+
+def send_telegram_alert(bot_token: str, chat_id: str, message: str):
+    try:
+        url = (
+            f"https://api.telegram.org/bot{bot_token}/sendMessage"
+            f"?chat_id={quote(chat_id)}&text={quote(message)}"
+        )
+        urlopen(url, timeout=8).read()
+        return True, "Telegram alert sent."
+    except URLError as exc:
+        return False, f"Telegram error: {exc.reason}"
+    except Exception as exc:
+        return False, f"Telegram error: {exc}"
+
+
+def send_email_alert(recipient: str, subject: str, message: str):
+    try:
+        smtp_host = st.secrets.get("smtp_host", "")
+        smtp_port = int(st.secrets.get("smtp_port", 587))
+        smtp_user = st.secrets.get("smtp_user", "")
+        smtp_pass = st.secrets.get("smtp_pass", "")
+        smtp_from = st.secrets.get("smtp_from", smtp_user)
+    except Exception:
+        smtp_host = ""
+        smtp_port = 587
+        smtp_user = ""
+        smtp_pass = ""
+        smtp_from = ""
+    if not smtp_host or not smtp_user or not smtp_pass:
+        return False, "SMTP secrets missing (smtp_host/smtp_user/smtp_pass)."
+
+    try:
+        mail = EmailMessage()
+        mail["From"] = smtp_from
+        mail["To"] = recipient
+        mail["Subject"] = subject
+        mail.set_content(message)
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_pass)
+            server.send_message(mail)
+        return True, "Email alert sent."
+    except Exception as exc:
+        return False, f"Email error: {exc}"
 
 st.set_page_config(page_title="Global War Economy Dashboard", layout="wide")
 
@@ -358,16 +636,13 @@ st.markdown(
 lang_code = st.sidebar.selectbox("Language / Langue / اللغة", ["EN", "FR", "AR"])
 t = TRANSLATIONS[lang_code]
 
-auto_refresh = st.sidebar.toggle(t["autorefresh"], value=True)
-if auto_refresh:
-    st_autorefresh(interval=60_000, key="refresh")
 st.sidebar.markdown(
     f'<span style="color:#22c55e;font-weight:700;">●</span> {t["status_live"]}',
     unsafe_allow_html=True,
 )
+st.sidebar.caption("Live dashboard updates every 15s without refreshing the full page.")
 
 last_updated = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-st.markdown(f'<div class="update-chip">{t["last_updated"]}: {last_updated}</div>', unsafe_allow_html=True)
 st.title(t["title"])
 
 
@@ -385,6 +660,8 @@ def fetch_price(symbol: str):
 
         current = _safe_float(fast_info.get("lastPrice") or fast_info.get("regularMarketPrice"))
         prev_close = _safe_float(fast_info.get("previousClose"))
+        market_ts = _safe_float(fast_info.get("regularMarketTime"))
+        source = "fast_info"
 
         # Fallback to intraday candles for current price.
         if current is None:
@@ -393,6 +670,8 @@ def fetch_price(symbol: str):
                 close = intraday["Close"].dropna()
                 if not close.empty:
                     current = _safe_float(close.iloc[-1])
+                    market_ts = datetime.now(timezone.utc).timestamp()
+                    source = "intraday_1m"
 
         # Fallback to daily candles for previous close.
         if prev_close is None:
@@ -401,18 +680,20 @@ def fetch_price(symbol: str):
                 close = daily["Close"].dropna()
                 if len(close) > 1:
                     prev_close = _safe_float(close.iloc[-2])
+                    source = "daily_fallback"
                 elif len(close) == 1:
                     prev_close = _safe_float(close.iloc[-1])
                     if current is None:
                         current = _safe_float(close.iloc[-1])
+                    source = "daily_fallback"
 
         if current is None or prev_close in (None, 0):
-            return None, None
+            return None, None, "unavailable", None
 
         change = ((current - prev_close) / prev_close) * 100
-        return current, float(change)
+        return current, float(change), source, market_ts
     except Exception:
-        return None, None
+        return None, None, "error", None
 
 
 @st.cache_data(ttl=120)
@@ -557,116 +838,368 @@ def war_risk_score(changes):
     return max(0, min(100, round(score, 1)))
 
 
-st.subheader(t["financial_engine"])
-metric_cols = st.columns(4)
-changes = {}
-unavailable_assets = []
+def war_risk_breakdown(changes):
+    gold = 0.35 * max(0.0, min((changes.get("GC=F") or 0.0), 5.0)) / 5.0
+    oil = 0.30 * max(0.0, min((changes.get("BZ=F") or 0.0), 5.0)) / 5.0
+    lmt = 0.20 * max(0.0, min((changes.get("LMT") or 0.0), 5.0)) / 5.0
+    rtx = 0.15 * max(0.0, min((changes.get("RTX") or 0.0), 5.0)) / 5.0
+    vol = 0.2 * (
+        min(abs(changes.get("GC=F") or 0.0), 5.0)
+        + min(abs(changes.get("BZ=F") or 0.0), 5.0)
+        + min(abs(changes.get("LMT") or 0.0), 5.0)
+        + min(abs(changes.get("RTX") or 0.0), 5.0)
+    ) / (4 * 5.0)
+    rows = {
+        t["contrib_gold"]: round(gold * 100, 2),
+        t["contrib_oil"]: round(oil * 100, 2),
+        t["contrib_lmt"]: round(lmt * 100, 2),
+        t["contrib_rtx"]: round(rtx * 100, 2),
+        t["contrib_volatility"]: round(vol * 100, 2),
+    }
+    return pd.DataFrame({t["contrib_label"]: list(rows.keys()), t["points_label"]: list(rows.values())})
 
-for col, (symbol, name_key) in zip(metric_cols, ASSETS.items()):
-    price, change = fetch_price(symbol)
-    changes[symbol] = change or 0.0
-    if price is None:
-        col.metric(t[name_key], t["na"], t["na"])
-        unavailable_assets.append(symbol)
-    else:
-        col.metric(t[name_key], f"{price:,.2f}", f"{change:+.2f}%")
 
-if unavailable_assets:
-    st.warning(
-        "Live market feed is temporarily unavailable for: "
-        + ", ".join(unavailable_assets)
-        + "."
-    )
+@st.cache_data(ttl=300)
+def fetch_score_history(days: int = 90):
+    closes = {}
+    for symbol in ASSETS:
+        series = yf.Ticker(symbol).history(period=f"{max(days, 30) + 20}d", interval="1d")["Close"].dropna()
+        closes[symbol] = series
+    close_df = pd.DataFrame(closes).dropna(how="all")
+    if close_df.empty:
+        return pd.DataFrame(columns=["Date", "Score"])
+    change_df = close_df.pct_change() * 100
+    change_df = change_df.fillna(0.0)
+    scores = change_df.apply(lambda row: war_risk_score(row.to_dict()), axis=1)
+    score_df = pd.DataFrame({"Date": scores.index, "Score": scores.values})
+    return score_df.tail(days)
 
-with st.container():
-    st.markdown(
-        f"""
-        <div class="bonus-card">
-          <h3 style="margin:0 0 8px 0; color:#ffd24d;">{t["hotzone_title"]}</h3>
-          <p style="margin:0 0 6px 0; color:#f7f7f7;">
-            {t["hotzone_text"]}
-          </p>
-          <a class="binance-main-btn" href="{BINANCE_BONUS_LINK}" target="_blank">
-            {t["hotzone_button"]}
-          </a>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
-if (changes.get("GC=F", 0) > 0) and (changes.get("LMT", 0) > 0) and (changes.get("RTX", 0) > 0):
-    st.markdown(f'<div class="alert-card">{t["war_hedge_msg"]}</div>', unsafe_allow_html=True)
-
-st.subheader(t["clock_title"])
-clock_cols = st.columns(3)
-clock_cols[0].metric(t["clock_tehran"], datetime.now(ZoneInfo("Asia/Tehran")).strftime("%H:%M:%S"))
-clock_cols[1].metric(t["clock_washington"], datetime.now(ZoneInfo("America/New_York")).strftime("%H:%M:%S"))
-clock_cols[2].metric(t["clock_algiers"], datetime.now(ZoneInfo("Africa/Algiers")).strftime("%H:%M:%S"))
-
-score = war_risk_score(changes)
-st.subheader(t["risk_title"])
-if go is not None:
-    fig = go.Figure(
-        go.Indicator(
-            mode="gauge+number",
-            value=score,
-            gauge={
-                "axis": {"range": [0, 100]},
-                "bar": {"color": "#f4c430"},
-                "steps": [
-                    {"range": [0, 35], "color": "#123524"},
-                    {"range": [35, 70], "color": "#5f4500"},
-                    {"range": [70, 100], "color": "#5c1010"},
-                ],
-            },
+def build_hotspot_table(news_items):
+    combined = " ".join((f"{x.get('title', '')} {x.get('summary', '')}" for x in news_items)).lower()
+    rows = []
+    for spot in HOTSPOTS:
+        hits = sum(combined.count(keyword) for keyword in spot["keywords"])
+        intensity = min(100, hits * 25)
+        rows.append(
+            {
+                t["hotspot_label"]: spot["name"],
+                t["intensity_label"]: intensity,
+                "Latitude": spot["lat"],
+                "Longitude": spot["lon"],
+            }
         )
-    )
-    fig.update_layout(height=250, margin=dict(l=20, r=20, t=30, b=10))
-    st.plotly_chart(fig, use_container_width=True)
-else:
-    st.progress(int(score))
-    st.caption(f"{score}/100")
+    return pd.DataFrame(rows, columns=[t["hotspot_label"], t["intensity_label"], "Latitude", "Longitude"])
 
-st.subheader(t["summary_title"])
-st.info(build_market_summary(changes))
 
-st.subheader(t["correlation_title"])
-st.warning(build_correlation(changes))
+def save_newsletter_lead(email: str):
+    leads_path = Path("newsletter_leads.csv")
+    if not leads_path.exists():
+        leads_path.write_text("timestamp,email\n")
+    current = leads_path.read_text()
+    leads_path.write_text(current + f"{datetime.now().isoformat()},{email}\n")
 
-st.subheader(t["charts_title"])
-trend_df = fetch_trend_7d()
-if not trend_df.empty:
-    st.line_chart(trend_df)
 
-st.subheader(t["intraday_title"])
-intraday = fetch_intraday_24h()
-row_cols = st.columns(2)
-for i, (symbol, name_key) in enumerate(ASSETS.items()):
-    with row_cols[i % 2]:
-        st.markdown(f"**{t[name_key]} ({symbol})**")
-        series = intraday.get(symbol)
-        if series is not None and not series.empty:
-            st.line_chart(series)
+def build_live_snapshot():
+    updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    changes = {}
+    asset_rows = []
+    unavailable_assets = []
 
-st.markdown(
-    f'<h3 style="margin-top:0.5rem;"><span class="live-dot"></span>{t["news_title"]}</h3>',
-    unsafe_allow_html=True,
+    for symbol, name_key in ASSETS.items():
+        price, change, source, market_ts = fetch_price(symbol)
+        changes[symbol] = change or 0.0
+        if price is None:
+            unavailable_assets.append(symbol)
+
+        market_time_text = t["na"]
+        freshness = t["na"]
+        if market_ts:
+            market_dt = datetime.fromtimestamp(market_ts, tz=timezone.utc)
+            market_time_text = market_dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+            freshness_min = max(0, int((datetime.now(timezone.utc) - market_dt).total_seconds() // 60))
+            freshness = f"{freshness_min} min"
+
+        asset_rows.append(
+            {
+                t["col_asset"]: symbol,
+                t["col_name"]: t[name_key],
+                t["col_price"]: price if price is not None else t["na"],
+                t["col_change"]: round(change, 3) if change is not None else t["na"],
+                t["col_source"]: source,
+                t["col_market_time"]: market_time_text,
+                t["col_freshness"]: freshness,
+                t["col_status"]: t["status_ok"] if price is not None else t["status_unavailable"],
+            }
+        )
+
+    return {
+        "updated_at": updated_at,
+        "changes": changes,
+        "asset_rows": asset_rows,
+        "unavailable_assets": unavailable_assets,
+        "score": war_risk_score(changes),
+        "trend_df": fetch_trend_7d(),
+        "intraday": fetch_intraday_24h(),
+        "news": fetch_live_news(limit=8),
+    }
+
+
+inject_seo_meta(
+    t["title"],
+    "Live geopolitical market risk dashboard with realtime score, hotspots, scenarios, and alerts.",
 )
-news = fetch_live_news(limit=5)
-if not news:
-    st.info(t["news_empty"])
-else:
-    st.subheader(t["ai_summary_title"])
-    for line in build_ai_summary(news):
-        st.markdown(line)
-    st.divider()
-    for item in news:
-        st.markdown(f"**[{item['title']}]({item['link']})**")
-        st.caption(f"{t['article_date']}: {item.get('date') or t['date_unknown']}")
-        st.caption(item["summary"])
-        st.markdown(f"[{t['read_original']}]({item['link']})")
 
-tweet_text = f"{t['title']} | {t['score_label']} {score}/100 | {build_correlation(changes)} | {t['last_updated']}: {last_updated}"
+if "live_snapshot" not in st.session_state:
+    st.session_state["live_snapshot"] = build_live_snapshot()
+snapshot = st.session_state["live_snapshot"]
+score = snapshot["score"]
+changes = snapshot["changes"]
+asset_rows = snapshot["asset_rows"]
+
+with st.sidebar.expander(t["alerts_title"], expanded=False):
+    alert_enabled = st.toggle(t["alerts_enable"], value=False)
+    alert_threshold = st.slider(t["alerts_threshold"], min_value=10, max_value=95, value=70, step=5)
+    inapp_alert = st.checkbox(t["alerts_inapp"], value=True)
+    tg_alert = st.checkbox(t["alerts_telegram"], value=False)
+    em_alert = st.checkbox(t["alerts_email"], value=False)
+    tg_token = st.text_input(t["alerts_bot_token"], type="password")
+    tg_chat_id = st.text_input(t["alerts_chat_id"])
+    email_target = st.text_input(t["alerts_email_target"])
+    st.caption(t["alerts_email_help"])
+
+tabs = st.tabs([t["tab_live"], t["tab_intel"], t["tab_hotspots"], t["tab_scenarios"], t["tab_growth"]])
+
+with tabs[0]:
+    @st.fragment(run_every=15)
+    def render_live_dashboard():
+        live = build_live_snapshot()
+        st.session_state["live_snapshot"] = live
+
+        st.markdown(
+            f'<div class="update-chip">{t["last_updated"]}: {live["updated_at"]}</div>',
+            unsafe_allow_html=True,
+        )
+        st.subheader(t["financial_engine"])
+        metric_cols = st.columns(4)
+        for col, (symbol, name_key) in zip(metric_cols, ASSETS.items()):
+            row = next((x for x in live["asset_rows"] if x[t["col_asset"]] == symbol), None)
+            if not row or row[t["col_price"]] == t["na"]:
+                col.metric(t[name_key], t["na"], t["na"])
+            else:
+                col.metric(t[name_key], f"{row[t['col_price']]:,.2f}", f"{row[t['col_change']]:+.2f}%")
+
+        prev_above = st.session_state.get("risk_prev_above", False)
+        is_above = live["score"] >= alert_threshold
+        if alert_enabled and is_above and not prev_above:
+            alert_msg = f"{t['risk_title']}: {live['score']}/100 at {live['updated_at']}"
+            if inapp_alert:
+                st.toast(alert_msg)
+            if tg_alert and tg_token and tg_chat_id:
+                ok, msg = send_telegram_alert(tg_token, tg_chat_id, alert_msg)
+                if not ok:
+                    st.sidebar.error(msg)
+                else:
+                    st.sidebar.success(t["alert_telegram_sent"])
+            if em_alert and email_target:
+                ok, msg = send_email_alert(email_target, "Global War Risk Alert", alert_msg)
+                if not ok:
+                    st.sidebar.error(msg)
+                else:
+                    st.sidebar.success(t["alert_email_sent"])
+        st.session_state["risk_prev_above"] = is_above
+
+        if live["unavailable_assets"]:
+            st.warning(t["data_feed_warn"] + " " + ", ".join(live["unavailable_assets"]) + ".")
+
+        with st.container():
+            st.markdown(
+                f"""
+                <div class="bonus-card">
+                  <h3 style="margin:0 0 8px 0; color:#ffd24d;">{t["hotzone_title"]}</h3>
+                  <p style="margin:0 0 6px 0; color:#f7f7f7;">
+                    {t["hotzone_text"]}
+                  </p>
+                  <a class="binance-main-btn" href="{BINANCE_BONUS_LINK}" target="_blank">
+                    {t["hotzone_button"]}
+                  </a>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        if (live["changes"].get("GC=F", 0) > 0) and (live["changes"].get("LMT", 0) > 0) and (live["changes"].get("RTX", 0) > 0):
+            st.markdown(f'<div class="alert-card">{t["war_hedge_msg"]}</div>', unsafe_allow_html=True)
+
+        st.subheader(t["clock_title"])
+        clock_cols = st.columns(3)
+        clock_cols[0].metric(t["clock_tehran"], datetime.now(ZoneInfo("Asia/Tehran")).strftime("%H:%M:%S"))
+        clock_cols[1].metric(t["clock_washington"], datetime.now(ZoneInfo("America/New_York")).strftime("%H:%M:%S"))
+        clock_cols[2].metric(t["clock_algiers"], datetime.now(ZoneInfo("Africa/Algiers")).strftime("%H:%M:%S"))
+
+        st.subheader(t["risk_title"])
+        if go is not None:
+            fig = go.Figure(
+                go.Indicator(
+                    mode="gauge+number",
+                    value=live["score"],
+                    gauge={
+                        "axis": {"range": [0, 100]},
+                        "bar": {"color": "#f4c430"},
+                        "steps": [
+                            {"range": [0, 35], "color": "#123524"},
+                            {"range": [35, 70], "color": "#5f4500"},
+                            {"range": [70, 100], "color": "#5c1010"},
+                        ],
+                    },
+                )
+            )
+            fig.update_layout(height=250, margin=dict(l=20, r=20, t=30, b=10))
+            st.plotly_chart(fig)
+        else:
+            st.progress(int(live["score"]))
+            st.caption(f'{live["score"]}/100')
+
+        st.subheader(t["summary_title"])
+        st.info(build_market_summary(live["changes"]))
+        st.subheader(t["correlation_title"])
+        st.warning(build_correlation(live["changes"]))
+
+        st.subheader(t["charts_title"])
+        if not live["trend_df"].empty:
+            st.line_chart(live["trend_df"])
+
+        st.subheader(t["intraday_title"])
+        row_cols = st.columns(2)
+        for i, (symbol, name_key) in enumerate(ASSETS.items()):
+            with row_cols[i % 2]:
+                st.markdown(f"**{t[name_key]} ({symbol})**")
+                series = live["intraday"].get(symbol)
+                if series is not None and not series.empty:
+                    st.line_chart(series)
+
+        st.markdown(
+            f'<h3 style="margin-top:0.5rem;"><span class="live-dot"></span>{t["news_title"]}</h3>',
+            unsafe_allow_html=True,
+        )
+        if not live["news"]:
+            st.info(t["news_empty"])
+        else:
+            st.subheader(t["ai_summary_title"])
+            for line in build_ai_summary(live["news"]):
+                st.markdown(line)
+            st.divider()
+            for item in live["news"]:
+                st.markdown(f"**[{item['title']}]({item['link']})**")
+                st.caption(f"{t['article_date']}: {item.get('date') or t['date_unknown']}")
+                st.caption(item["summary"])
+                st.markdown(f"[{t['read_original']}]({item['link']})")
+
+    render_live_dashboard()
+
+with tabs[1]:
+    latest = st.session_state.get("live_snapshot", snapshot)
+    st.subheader(t["risk_history_title"])
+    history_window = st.radio(t["risk_window"], options=[7, 30, 90], horizontal=True)
+    history_df = fetch_score_history(history_window)
+    if history_df.empty:
+        st.info(t["risk_history_unavailable"])
+    else:
+        st.line_chart(history_df.set_index("Date")["Score"])
+
+    st.subheader(t["score_explainability"])
+    breakdown_df = war_risk_breakdown(latest["changes"])
+    st.bar_chart(breakdown_df.set_index(t["contrib_label"])[t["points_label"]])
+    st.caption(f"{t['current_score']}: {latest['score']}/100")
+
+    st.subheader(t["data_reliability"])
+    reliability_df = pd.DataFrame(latest["asset_rows"])
+    st.dataframe(reliability_df, width="stretch", hide_index=True)
+
+with tabs[2]:
+    st.subheader(t["hotspots_title"])
+    latest = st.session_state.get("live_snapshot", snapshot)
+    news_for_hotspots = latest["news"] if latest["news"] else fetch_live_news(limit=12)
+    hotspot_df = build_hotspot_table(news_for_hotspots)
+    if go is not None and not hotspot_df.empty:
+        geo = go.Figure(
+            go.Scattergeo(
+                lon=hotspot_df["Longitude"],
+                lat=hotspot_df["Latitude"],
+                text=hotspot_df[t["hotspot_label"]] + " | " + t["intensity_label"] + ": " + hotspot_df[t["intensity_label"]].astype(str),
+                mode="markers+text",
+                textposition="top center",
+                marker=dict(
+                    size=[8 + int(v / 6) for v in hotspot_df[t["intensity_label"]]],
+                    color=hotspot_df[t["intensity_label"]],
+                    colorscale="Reds",
+                    cmin=0,
+                    cmax=100,
+                    showscale=True,
+                    colorbar=dict(title=t["intensity_label"]),
+                ),
+            )
+        )
+        geo.update_layout(geo=dict(showland=True, landcolor="#111827", bgcolor="#0b1220"), height=500)
+        st.plotly_chart(geo)
+    st.dataframe(hotspot_df[[t["hotspot_label"], t["intensity_label"]]], width="stretch", hide_index=True)
+
+with tabs[3]:
+    st.subheader(t["scenario_comparison"])
+    latest = st.session_state.get("live_snapshot", snapshot)
+    base = latest["changes"].copy()
+    presets = {
+        t["scenario_escalation"]: {"GC=F": 2.0, "BZ=F": 3.0, "LMT": 1.5, "RTX": 1.2},
+        t["scenario_status_quo"]: {"GC=F": 0.2, "BZ=F": 0.2, "LMT": 0.1, "RTX": 0.1},
+        t["scenario_deescalation"]: {"GC=F": -1.5, "BZ=F": -2.0, "LMT": -1.0, "RTX": -0.8},
+    }
+    scenario_rows = []
+    for name, deltas in presets.items():
+        hypothetical = {k: (base.get(k, 0.0) + deltas.get(k, 0.0)) for k in ASSETS}
+        scenario_rows.append({t["scenario_label"]: name, t["projected_score"]: war_risk_score(hypothetical)})
+    st.dataframe(pd.DataFrame(scenario_rows), width="stretch", hide_index=True)
+
+    st.subheader(t["custom_scenario"])
+    c1, c2 = st.columns(2)
+    with c1:
+        d_gold = st.slider(t["gold_shift"], -5.0, 5.0, 0.0, 0.1)
+        d_oil = st.slider(t["oil_shift"], -5.0, 5.0, 0.0, 0.1)
+    with c2:
+        d_lmt = st.slider(t["lmt_shift"], -5.0, 5.0, 0.0, 0.1)
+        d_rtx = st.slider(t["rtx_shift"], -5.0, 5.0, 0.0, 0.1)
+    custom = {
+        "GC=F": base.get("GC=F", 0.0) + d_gold,
+        "BZ=F": base.get("BZ=F", 0.0) + d_oil,
+        "LMT": base.get("LMT", 0.0) + d_lmt,
+        "RTX": base.get("RTX", 0.0) + d_rtx,
+    }
+    st.metric(t["projected_global_risk"], f"{war_risk_score(custom)}/100")
+
+with tabs[4]:
+    st.subheader(t["growth_title"])
+    st.markdown(f"### {t['premium_signals']}")
+    st.write(t["premium_free"])
+    st.write(t["premium_pro"])
+    st.write(t["premium_enterprise"])
+    st.link_button(t["join_waitlist"], "mailto:contact@example.com?subject=Premium%20Waitlist")
+
+    st.markdown(f"### {t['newsletter']}")
+    with st.form("newsletter_form", clear_on_submit=True):
+        lead_email = st.text_input(t["newsletter"])
+        submit_lead = st.form_submit_button(t["subscribe"])
+        if submit_lead:
+            if "@" not in lead_email:
+                st.error(t["invalid_email"])
+            else:
+                save_newsletter_lead(lead_email.strip())
+                st.success(t["subscribed_ok"])
+
+latest_for_share = st.session_state.get("live_snapshot", snapshot)
+tweet_text = (
+    f"{t['title']} | {t['score_label']} {latest_for_share['score']}/100 | "
+    f"{build_correlation(latest_for_share['changes'])} | "
+    f"{t['last_updated']}: {latest_for_share['updated_at']}"
+)
 tweet_url = f"https://x.com/intent/tweet?text={quote(tweet_text)}"
 st.link_button(t["share_x"], tweet_url)
 
@@ -674,7 +1207,7 @@ st.sidebar.markdown('<div class="support-card">', unsafe_allow_html=True)
 st.sidebar.markdown(f"**{t['developer_support']}**")
 st.sidebar.markdown(t["support_pitch"])
 st.sidebar.write(f"**{t['binance_pay_id']}:** `{BINANCE_PAY_ID}`")
-if st.sidebar.button(t["copy_id"], use_container_width=True):
+if st.sidebar.button(t["copy_id"], width="stretch"):
     st.sidebar.success(t["copy_done"])
 st.sidebar.markdown("</div>", unsafe_allow_html=True)
 
